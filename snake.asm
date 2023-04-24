@@ -77,8 +77,8 @@ game_loop:
     je move_down
     cmp al,LEFT
     je move_left
-    cmp al,DOWN
-    je move_down
+    cmp al,RIGHT
+    je move_right
 
     jmp update_snake_body
 
@@ -107,7 +107,7 @@ game_loop:
             dec bx
         jnz .update_loop 
     
-    ;;Update head in the snake array
+    ;;update head in the snake array
     mov ax,[playerX]
     mov word [SNAKEXARRAY],ax
     mov ax,[playerY]
@@ -115,19 +115,50 @@ game_loop:
 
 
     get_player_input:
-    mov bl,[direction]
+        mov bl,[direction]
+        
+        mov ah,1
+        int 16h ;bios software interrupt to start listening for keyboard input
+        jz check_apple
+
+        xor ah,ah
+        int 16h
+
+        cmp al,'w'
+        je w_pressed
+        cmp al,'s'
+        je s_pressed
+        cmp al,'a'
+        je a_pressed
+        cmp al,'d'
+        je d_pressed
+
+        jmp check_apple
+
+        w_pressed:
+            mov bl,UP
+            jmp check_apple
+        s_pressed:
+            mov bl,DOWN
+            jmp check_apple
+        a_pressed:
+            mov bl,LEFT
+            jmp check_apple
+        d_pressed:
+            mov bl,RIGHT
     
-    mov ah,1
+    check_apple:
+        mov byte [direction],bl
 
 
     delay_loop:
         mov bx,[TIMER]
         inc bx
-        inc bx
 
         .delay:
             cmp [TIMER],bx
             jl .delay
+
 
 
 jmp game_loop
