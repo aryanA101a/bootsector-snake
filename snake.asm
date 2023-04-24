@@ -43,6 +43,11 @@ setup_game:
     mov ax,[playerY]
     mov word [SNAKEYARRAY],ax
 
+    ;;hide cursor
+    mov ah,02h ;set cursor position function code
+    mov dx,2600h ;cursor position to set
+    int 10h ;bios video dervices interrupt
+
 game_loop:
     mov ax,BGCOLOR
     xor di,di
@@ -69,7 +74,7 @@ game_loop:
     mov ax, APPLECOLOR
     stosw
 
-    ;;Move snake in current direction
+    ;; Move snake in current direction
     mov al, [direction]
     cmp al,UP
     je move_up
@@ -107,22 +112,55 @@ game_loop:
             dec bx
         jnz .update_loop 
     
-    ;;update head in the snake array
+    ;; Update head in the snake array
     mov ax,[playerX]
     mov word [SNAKEXARRAY],ax
     mov ax,[playerY]
     mov word [SNAKEYARRAY],ax
 
+    ;; Lose conditions
+    
+    ;; 1. Borders
+    cmp word[playerY], -1
+    je game_lost
+    cmp word[playerY], SCREENH
+    je game_lost
+    cmp word[playerX], -1
+    je game_lost
+    cmp word[playerX], SCREENW
+    je game_lost
+
+    ; 2. Snake body
+    cmp word [snakeLength],1
+    je get_player_input
+
+    mov bx,2
+    mov cx,[snakeLength]
+    check_body_hit_loop:
+        mov ax,[playerX]
+        cmp ax, [SNAKEXARRAY+bx]
+        jne .increment
+
+        mov ax,[playerY]
+        cmp ax,[SNAKEYARRAY+bx]
+        je game_lost
+
+        .increment:
+            inc bx
+            inc bx
+    loop check_body_hit_loop
+
+
 
     get_player_input:
         mov bl,[direction]
         
-        mov ah,1
+        mov ah,1 ;ah<-1 to read a single keystroke
         int 16h ;bios software interrupt to start listening for keyboard input
         jz check_apple
 
         xor ah,ah
-        int 16h
+        int 16h ;on calling this interrupt the second time it stores the key pressed to al
 
         cmp al,'w'
         je w_pressed
@@ -150,9 +188,58 @@ game_loop:
     check_apple:
         mov byte [direction],bl
 
+        mov ax,[playerX]
+        cmp ax,[appleX]
+        jne delay_loop
+
+        mov ax,[playerY]
+        cmp ax,[appleY]
+        jne delay_loop
+
+        ;inc snake length
+        inc word [snakeLength]
+        cmp word [snakeLength],WINCOND ;check winning condition
+        je game_won
+    
+    next_apple:
+        ;; Random X position
+        xor ah,ah
+        int 1Ah ;timer ticks since midnight in cx:dx
+        mov ax,dx
+        xor dx,dx
+        mov cx,SCREENW
+        div cx ;ax/cx ax<-q dx<-r
+        mov word [appleX],dx
+
+        ;; Random Y position
+        xor ah,ah
+        int 1Ah
+        mov ax,dx
+        xor dx,dx
+        mov cx,SCREENH
+        div cx ;ax/cx ax<-q dx<-r
+        mov word [appleY],dx
+    
+    ;;Apple inside snake
+    xor bx,bx
+    mov cx,[snakeLength]
+    .check_loop:
+        mov ax,[appleX]
+        cmp ax,[SNAKEXARRAY+bx]
+        jne .increment
+
+        mov ax,[appleY]
+        cmp ax,[SNAKEYARRAY+bx]
+        je next_apple
+
+        .increment:
+            inc bx
+            inc bx
+    loop .check_loop
 
     delay_loop:
         mov bx,[TIMER]
+        inc bx
         inc bx
 
         .delay:
@@ -162,6 +249,22 @@ game_loop:
 
 
 jmp game_loop
+
+;; End Conditions
+game_won:
+    mov dword [ES:07ceh],0a249a257h
+    mov dword [ES:07d2h],0a221a24eh
+    jmp reset
+
+game_lost:
+    mov dword [ES:07ceh],0c44Fc44Ch
+    mov dword [ES:07d2h],0c445c453h
+
+reset:
+    xor ah,ah
+    int 16h
+
+    jmp 0FFFFh:0000h ;warm reboot 
 
 ;; BOOTSECTOR PADDING
 times 510 - ($-$$) db 0 ; fill in zeros 510-(current bytes-top byte) times
